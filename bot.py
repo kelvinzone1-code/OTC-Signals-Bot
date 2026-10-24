@@ -16,19 +16,23 @@ TIMEFRAME = 300          # 5 minute candles
 EXPIRY_MIN = 5
 MAX_SIGNALS = 10
 MIN_GAP = 30 * 60        # seconds between signals
+MIN_LEAD = 180           # entry time is at least 3 minutes away
 START_HOUR, END_HOUR = 8, 20   # Lagos time
 SUMMARY_HOUR = 21
 
 LAGOS = ZoneInfo("Africa/Lagos")
 now_dt = datetime.now(LAGOS)
 today = now_dt.strftime("%Y-%m-%d")
+EVENT = os.environ.get("GITHUB_EVENT_NAME", "")
+print("event:", EVENT)
 
 def send(text):
     r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
                       data={"chat_id": CHANNEL, "text": text})
-    print("telegram:", r.status_code, r.text[:100])
-    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
-        send("Test: the bot is connected")
+    print("telegram:", r.status_code, r.text[:150])
+
+if EVENT == "workflow_dispatch":
+    send("Test: the bot is connected 😊")
 
 try:
     with open("state.json") as f:
@@ -36,7 +40,6 @@ try:
 except Exception:
     state = {"signals": [], "summary_day": ""}
 
-# keep only the last 7 days
 cutoff = time.time() - 7 * 86400
 state["signals"] = [s for s in state["signals"] if s["ts"] > cutoff]
 
@@ -73,18 +76,24 @@ def analyze(df):
 
 def settle():
     for s in state["signals"]:
-        if s["result"] is not None or s["expiry_ts"] > time.time() - 60:
+        if s["result"] is not None or "entry_ts" not in s:
+            continue
+        if s["expiry_ts"] > time.time() - 60:
             continue
         try:
-            c = api.get_candles(s["pair"], 60, 5, s["expiry_ts"] + 60)
-            c = [x for x in c if x["from"] + 60 <= s["expiry_ts"]][-1]
-            exit_price = c["close"]
+            c = api.get_candles(s["pair"], TIMEFRAME, 5, s["expiry_ts"] + 60)
+            m = [x for x in c if x["from"] == s["entry_ts"]]
+            if not m:
+                continue
+            entry_price = m[0]["open"]
+            exit_price = m[0]["close"]
         except Exception as e:
             print("settle error", e)
             continue
-        if exit_price == s["entry"]: res = "DRAW"
-        elif (exit_price > s["entry"]) == (s["direction"] == "CALL"): res = "WIN"
+        if exit_price == entry_price: res = "DRAW"
+        elif (exit_price > entry_price) == (s["direction"] == "CALL"): res = "WIN"
         else: res = "LOSS"
+        s["entry"] = entry_price
         s["exit"] = exit_price
         s["result"] = res
 
@@ -103,28 +112,44 @@ def scan():
             print("scan error", pair, e)
             continue
         if direction:
-            entry = api.get_candles(pair, 60, 1, time.time())[-1]["close"]
-            ts = int(time.time())
-            state["signals"].append({"ts": ts, "day": today, "pair": pair,
-                "direction": direction, "entry": entry,
-                "expiry_ts": ts + EXPIRY_MIN * 60, "exit": None, "result": None})
-            send(f"SIGNAL {len(todays)+1}/{MAX_SIGNALS}\nPair: {pair}\n"
-                 f"Direction: {direction}\nExpiry: {EXPIRY_MIN} min\nEnter now.")
+            now = int(time.time())
+            entry_ts = (now // TIMEFRAME + 1) * TIMEFRAME
+            if entry_ts - now < MIN_LEAD:
+                entry_ts += TIMEFRAME
+            expiry_ts = entry_ts + EXPIRY_MIN * 60
+            entry_time = datetime.fromtimestamp(entry_ts, LAGOS).strftime("%I:%M %p")
+            state["signals"].append({"ts": now, "day": today, "pair": pair,
+                "direction": direction, "entry_ts": entry_ts,
+                "expiry_ts": expiry_ts, "entry": None, "exit": None,
+                "result": None})
+            if direction == "CALL":
+                word, arrow, dot = "BUY (UP)", "📈", "🟢"
+            else:
+                word, arrow, dot = "SELL (DOWN)", "📉", "🔴"
+            send(f"🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
+                 f"💱 Pair: {pair}\n"
+                 f"{arrow} Direction: {word} {dot}\n"
+                 f"⏰ Enter at: {entry_time} (Nigerian time)\n"
+                 f"⌛ Expiry: {EXPIRY_MIN} minutes\n\n"
+                 f"Be ready 1 minute before entry. Good luck 😊")
             return
 
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
     if not rows:
-        send(f"DAILY SUMMARY {today}\nNo signals were sent today.")
+        send(f"📊 DAILY SUMMARY {today}\n\nNo signals were sent today.")
         return
     w = sum(r["result"] == "WIN" for r in rows)
     l = sum(r["result"] == "LOSS" for r in rows)
     d = sum(r["result"] == "DRAW" for r in rows)
     rate = round(w / max(w + l, 1) * 100, 1)
-    lines = [f"{i+1}. {r['pair']} {r['direction']}: {r['result'] or 'PENDING'}"
+    icons = {"WIN": "✅", "LOSS": "❌", "DRAW": "➖", None: "⏳"}
+    lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: "
+             f"{icons[r['result']]} {r['result'] or 'PENDING'}"
              for i, r in enumerate(rows)]
-    send(f"DAILY SUMMARY {today}\nSignals: {len(rows)}\nWins: {w}\nLosses: {l}\n"
-         f"Draws: {d}\nWin rate: {rate}%\n\n" + "\n".join(lines))
+    send(f"📊 DAILY SUMMARY {today}\n\n"
+         f"Signals: {len(rows)}\n✅ Wins: {w}\n❌ Losses: {l}\n➖ Draws: {d}\n"
+         f"🎯 Win rate: {rate}%\n\n" + "\n".join(lines))
 
 settle()
 if now_dt.hour >= SUMMARY_HOUR and state["summary_day"] != today:
