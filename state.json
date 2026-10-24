@@ -1,1 +1,1 @@
-{"signals": [{"ts": 1792837390, "day": "2026-10-24", "pair": "GBPUSD-OTC", "direction": "CALL", "entry_ts": 1792837800, "expiry_ts": 1792838100, "entry": null, "exit": null, "result": null}], "summary_day": ""}
+{"signals": [{"ts": 1792837390, "day": "2026-10-24", "pair": "GBPUSD-OTC", "direction": "CALL", "entry_ts": 1792837800, "expiry_ts": 1792838100, "entry": 1.327995, "exit": 1.328075, "result": "WIN"}], "summary_day": ""}
