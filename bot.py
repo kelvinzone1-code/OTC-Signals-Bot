@@ -28,7 +28,7 @@ def send(text):
                       data={"chat_id": CHANNEL, "text": text})
     print("telegram:", r.status_code, r.text[:100])
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
-    send("Test: the bot is connected")
+        send("Test: the bot is connected")
 
 try:
     with open("state.json") as f:
