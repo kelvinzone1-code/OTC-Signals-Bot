@@ -126,7 +126,7 @@ def scan():
                 word, arrow, dot = "BUY (UP)", "📈", "🟢"
             else:
                 word, arrow, dot = "SELL (DOWN)", "📉", "🔴"
-            send(f"🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
+            send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
                  f"💱 Pair: {pair}\n"
                  f"{arrow} Direction: {word} {dot}\n"
                  f"⏰ Enter at: {entry_time} (Nigerian time)\n"
@@ -137,7 +137,7 @@ def scan():
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
     if not rows:
-        send(f"📊 DAILY SUMMARY {today}\n\nNo signals were sent today.")
+        send(f"📊 OTC DAILY SUMMARY {today}\n\nNo signals were sent today.")
         return
     w = sum(r["result"] == "WIN" for r in rows)
     l = sum(r["result"] == "LOSS" for r in rows)
