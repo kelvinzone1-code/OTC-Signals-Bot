@@ -14,11 +14,12 @@ PASSWORD = os.environ["IQ_PASS"]
 PAIRS = ["EURUSD-OTC", "GBPUSD-OTC", "EURJPY-OTC", "USDJPY-OTC"]
 TIMEFRAME = 300          # 5 minute candles
 EXPIRY_MIN = 5
-MAX_SIGNALS = 10
+MAX_SIGNALS = 15
 MIN_GAP = 30 * 60        # seconds between signals
 MIN_LEAD = 180           # entry time is at least 3 minutes away
-START_HOUR, END_HOUR = 8, 20   # Lagos time
-SUMMARY_HOUR = 21
+START_HOUR = 8
+END_MINUTES = 22 * 60 + 30   # last signal at 10:30pm Lagos time
+SUMMARY_HOUR = 23            # summary from 11pm Lagos time
 
 LAGOS = ZoneInfo("Africa/Lagos")
 now_dt = datetime.now(LAGOS)
@@ -98,7 +99,8 @@ def settle():
         s["result"] = res
 
 def scan():
-    if not (START_HOUR <= now_dt.hour <= END_HOUR):
+    minutes_now = now_dt.hour * 60 + now_dt.minute
+    if not (START_HOUR * 60 <= minutes_now <= END_MINUTES):
         return
     todays = [s for s in state["signals"] if s["day"] == today]
     if len(todays) >= MAX_SIGNALS:
@@ -126,7 +128,8 @@ def scan():
                 word, arrow, dot = "BUY (UP)", "📈", "🟢"
             else:
                 word, arrow, dot = "SELL (DOWN)", "📉", "🔴"
-            send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
+            send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n"
+                 f"🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
                  f"💱 Pair: {pair}\n"
                  f"{arrow} Direction: {word} {dot}\n"
                  f"⏰ Enter at: {entry_time} (Nigerian time)\n"
@@ -137,7 +140,8 @@ def scan():
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
     if not rows:
-        send(f"📊 OTC DAILY SUMMARY {today}\n\nNo signals were sent today.")
+        send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 DAILY SUMMARY {today}\n\n"
+             f"No signals were sent today.")
         return
     w = sum(r["result"] == "WIN" for r in rows)
     l = sum(r["result"] == "LOSS" for r in rows)
@@ -147,7 +151,7 @@ def summary():
     lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: "
              f"{icons[r['result']]} {r['result'] or 'PENDING'}"
              for i, r in enumerate(rows)]
-    send(f"📊 OTC DAILY SUMMARY {today}\n\n"
+    send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 DAILY SUMMARY {today}\n\n"
          f"Signals: {len(rows)}\n✅ Wins: {w}\n❌ Losses: {l}\n➖ Draws: {d}\n"
          f"🎯 Win rate: {rate}%\n\n" + "\n".join(lines))
 
