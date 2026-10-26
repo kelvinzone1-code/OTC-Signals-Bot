@@ -147,7 +147,7 @@ def summary():
     lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: "
              f"{icons[r['result']]} {r['result'] or 'PENDING'}"
              for i, r in enumerate(rows)]
-    send(f"📊 DAILY SUMMARY {today}\n\n"
+    send(f"📊 OTC DAILY SUMMARY {today}\n\n"
          f"Signals: {len(rows)}\n✅ Wins: {w}\n❌ Losses: {l}\n➖ Draws: {d}\n"
          f"🎯 Win rate: {rate}%\n\n" + "\n".join(lines))
 
