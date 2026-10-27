@@ -18,7 +18,7 @@ MAX_SIGNALS = 15
 MIN_GAP = 30 * 60        # seconds between signals
 MIN_LEAD = 180           # entry time is at least 3 minutes away
 START_HOUR = 8
-END_MINUTES = 20 * 60 + 30   # last signal at 8:30pm Lagos time
+END_MINUTES = 20 * 60 + 15   # last signal at 8:15pm Lagos time
 SUMMARY_HOUR = 21            # summary from 9pm Lagos time
 
 LAGOS = ZoneInfo("Africa/Lagos")
@@ -77,26 +77,37 @@ def analyze(df):
 
 def settle():
     for s in state["signals"]:
-        if s["result"] is not None or "entry_ts" not in s:
+        if s["result"] is not None or "levels" not in s:
             continue
-        if s["expiry_ts"] > time.time() - 60:
-            continue
-        try:
-            c = api.get_candles(s["pair"], TIMEFRAME, 5, s["expiry_ts"] + 60)
-            m = [x for x in c if x["from"] == s["entry_ts"]]
-            if not m:
-                continue
-            entry_price = m[0]["open"]
-            exit_price = m[0]["close"]
-        except Exception as e:
-            print("settle error", e)
-            continue
-        if exit_price == entry_price: res = "DRAW"
-        elif (exit_price > entry_price) == (s["direction"] == "CALL"): res = "WIN"
-        else: res = "LOSS"
-        s["entry"] = entry_price
-        s["exit"] = exit_price
-        s["result"] = res
+        # levels: 0 = direct entry, 1 to 3 = Martingale levels
+        while len(s["levels"]) < 4:
+            k = len(s["levels"])
+            lvl_entry = s["entry_ts"] + TIMEFRAME * k
+            lvl_end = lvl_entry + TIMEFRAME
+            if lvl_end > time.time() - 60:
+                break
+            try:
+                c = api.get_candles(s["pair"], TIMEFRAME, 5, lvl_end + 60)
+                m = [x for x in c if x["from"] == lvl_entry]
+                if not m:
+                    break
+                o, cl = m[0]["open"], m[0]["close"]
+            except Exception as e:
+                print("settle error", e)
+                break
+            if cl == o: r = "DRAW"
+            elif (cl > o) == (s["direction"] == "CALL"): r = "WIN"
+            else: r = "LOSS"
+            s["levels"].append(r)
+            if r == "WIN":
+                s["result"] = "WIN"
+                s["win_level"] = k
+                break
+            if r == "DRAW":
+                s["result"] = "DRAW"
+                break
+            if k == 3:
+                s["result"] = "LOSS"
 
 def scan():
     minutes_now = now_dt.hour * 60 + now_dt.minute
@@ -118,12 +129,11 @@ def scan():
             entry_ts = (now // TIMEFRAME + 1) * TIMEFRAME
             if entry_ts - now < MIN_LEAD:
                 entry_ts += TIMEFRAME
-            expiry_ts = entry_ts + EXPIRY_MIN * 60
-            entry_time = datetime.fromtimestamp(entry_ts, LAGOS).strftime("%I:%M %p")
             state["signals"].append({"ts": now, "day": today, "pair": pair,
                 "direction": direction, "entry_ts": entry_ts,
-                "expiry_ts": expiry_ts, "entry": None, "exit": None,
-                "result": None})
+                "levels": [], "win_level": None, "result": None})
+            def fmt(ts):
+                return datetime.fromtimestamp(ts, LAGOS).strftime("%I:%M %p")
             if direction == "CALL":
                 word, arrow, dot = "BUY (UP)", "📈", "🟢"
             else:
@@ -132,28 +142,49 @@ def scan():
                  f"🔥 SIGNAL {len(todays)+1}/{MAX_SIGNALS} 🔥\n\n"
                  f"💱 Pair: {pair}\n"
                  f"{arrow} Direction: {word} {dot}\n"
-                 f"⏰ Enter at: {entry_time} (Nigerian time)\n"
+                 f"⏰ Enter at: {fmt(entry_ts)} (Nigerian time)\n"
                  f"⌛ Expiry: {EXPIRY_MIN} minutes\n\n"
-                 f"Be ready 1 minute before entry. Good luck 😊")
+                 f"📊 Martingale Levels:\n"
+                 f"• Level 1 → {fmt(entry_ts + TIMEFRAME)}\n"
+                 f"• Level 2 → {fmt(entry_ts + 2 * TIMEFRAME)}\n"
+                 f"• Level 3 → {fmt(entry_ts + 3 * TIMEFRAME)}\n\n"
+                 f"Be ready 1 minute before entry. Good luck 😊\n"
+                 f"⚠️ Trade responsibly. Never risk more than you can afford to lose.")
             return
 
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
+    head = "⚡ LASER AI VIP SIGNAL ⚡\n\n"
     if not rows:
-        send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 OTC DAILY SUMMARY {today}\n\n"
-             f"No signals were sent today.")
+        send(head + f"📊 OTC DAILY SUMMARY {today}\n\nNo signals were sent today.")
         return
-    w = sum(r["result"] == "WIN" for r in rows)
-    l = sum(r["result"] == "LOSS" for r in rows)
-    d = sum(r["result"] == "DRAW" for r in rows)
-    rate = round(w / max(w + l, 1) * 100, 1)
-    icons = {"WIN": "✅", "LOSS": "❌", "DRAW": "➖", None: "⏳"}
-    lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: "
-             f"{icons[r['result']]} {r['result'] or 'PENDING'}"
+    direct = sum(r["result"] == "WIN" and r.get("win_level") == 0 for r in rows)
+    level = sum(r["result"] == "WIN" and (r.get("win_level") or 0) > 0 for r in rows)
+    loss = sum(r["result"] == "LOSS" for r in rows)
+    draw = sum(r["result"] == "DRAW" for r in rows)
+    pend = sum(r["result"] is None for r in rows)
+    settled = len(rows) - pend
+    direct_rate = round(direct / max(settled, 1) * 100, 1)
+    overall_rate = round((direct + level) / max(direct + level + loss, 1) * 100, 1)
+
+    def label(r):
+        if r["result"] == "WIN":
+            return "✅ WIN (Direct)" if r.get("win_level") == 0 else f"✅ WIN (Level {r['win_level']})"
+        if r["result"] == "LOSS": return "❌ LOSS (all levels)"
+        if r["result"] == "DRAW": return "➖ DRAW"
+        return "⏳ PENDING"
+
+    lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: {label(r)}"
              for i, r in enumerate(rows)]
-    send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 OTC DAILY SUMMARY {today}\n\n"
-         f"Signals: {len(rows)}\n✅ Wins: {w}\n❌ Losses: {l}\n➖ Draws: {d}\n"
-         f"🎯 Win rate: {rate}%\n\n" + "\n".join(lines))
+    send(head + f"📊 OTC DAILY SUMMARY {today}\n\n"
+         f"Signals: {len(rows)}\n"
+         f"✅ Direct wins: {direct}\n"
+         f"🔁 Wins on Martingale levels: {level}\n"
+         f"❌ Full losses (all 4 entries): {loss}\n"
+         f"➖ Draws: {draw}\n"
+         f"⏳ Pending: {pend}\n\n"
+         f"🎯 Direct entry win rate: {direct_rate}%\n"
+         f"🎯 Win rate with levels: {overall_rate}%\n\n" + "\n".join(lines))
 
 settle()
 if now_dt.hour >= SUMMARY_HOUR and state["summary_day"] != today:
