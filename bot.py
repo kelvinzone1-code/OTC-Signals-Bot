@@ -18,8 +18,8 @@ MAX_SIGNALS = 15
 MIN_GAP = 30 * 60        # seconds between signals
 MIN_LEAD = 180           # entry time is at least 3 minutes away
 START_HOUR = 8
-END_MINUTES = 22 * 60 + 30   # last signal at 10:30pm Lagos time
-SUMMARY_HOUR = 23            # summary from 11pm Lagos time
+END_MINUTES = 20 * 60 + 30   # last signal at 8:30pm Lagos time
+SUMMARY_HOUR = 21            # summary from 9pm Lagos time
 
 LAGOS = ZoneInfo("Africa/Lagos")
 now_dt = datetime.now(LAGOS)
@@ -140,7 +140,7 @@ def scan():
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
     if not rows:
-        send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 DAILY SUMMARY {today}\n\n"
+        send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 OTC DAILY SUMMARY {today}\n\n"
              f"No signals were sent today.")
         return
     w = sum(r["result"] == "WIN" for r in rows)
@@ -151,7 +151,7 @@ def summary():
     lines = [f"{i+1}. {r['pair']} {'BUY' if r['direction']=='CALL' else 'SELL'}: "
              f"{icons[r['result']]} {r['result'] or 'PENDING'}"
              for i, r in enumerate(rows)]
-    send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 DAILY SUMMARY {today}\n\n"
+    send(f"⚡ LASER AI VIP SIGNAL ⚡\n\n📊 OTC DAILY SUMMARY {today}\n\n"
          f"Signals: {len(rows)}\n✅ Wins: {w}\n❌ Losses: {l}\n➖ Draws: {d}\n"
          f"🎯 Win rate: {rate}%\n\n" + "\n".join(lines))
 
