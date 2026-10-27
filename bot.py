@@ -154,7 +154,7 @@ def scan():
 
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
-        for r in rows:
+    for r in rows:
         if r["result"] == "WIN" and "win_level" not in r:
             r["win_level"] = 0
     head = "⚡ LASER AI VIP SIGNAL ⚡\n\n"
@@ -172,7 +172,9 @@ def summary():
 
     def label(r):
         if r["result"] == "WIN":
-            return "✅ WIN (Direct)" if r.get("win_level") == 0 else f"✅ WIN (Level {r['win_level']})"
+            if r.get("win_level") == 0:
+                return "✅ WIN (Direct)"
+            return f"✅ WIN (Level {r.get('win_level')})"
         if r["result"] == "LOSS": return "❌ LOSS (all levels)"
         if r["result"] == "DRAW": return "➖ DRAW"
         return "⏳ PENDING"
