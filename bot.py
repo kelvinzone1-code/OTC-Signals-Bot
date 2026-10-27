@@ -154,6 +154,9 @@ def scan():
 
 def summary():
     rows = [s for s in state["signals"] if s["day"] == today]
+        for r in rows:
+        if r["result"] == "WIN" and "win_level" not in r:
+            r["win_level"] = 0
     head = "⚡ LASER AI VIP SIGNAL ⚡\n\n"
     if not rows:
         send(head + f"📊 OTC DAILY SUMMARY {today}\n\nNo signals were sent today.")
