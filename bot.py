@@ -12,13 +12,13 @@ EMAIL = os.environ["IQ_EMAIL"]
 PASSWORD = os.environ["IQ_PASS"]
 
 PAIRS = ["EURUSD-OTC", "GBPUSD-OTC", "EURJPY-OTC", "USDJPY-OTC"]
-TIMEFRAME = 300          # 5 minute candles
-EXPIRY_MIN = 5
+TIMEFRAME = 120          # 2 minute candles
+EXPIRY_MIN = 2
 MAX_SIGNALS = 15
 MIN_GAP = 30 * 60        # seconds between signals
 MIN_LEAD = 180           # entry time is at least 3 minutes away
 START_HOUR = 8
-END_MINUTES = 20 * 60 + 15   # last signal at 8:15pm Lagos time
+END_MINUTES = 20 * 60 + 30   # last signal at 8:30pm Lagos time
 SUMMARY_HOUR = 21            # summary from 9pm Lagos time
 
 LAGOS = ZoneInfo("Africa/Lagos")
